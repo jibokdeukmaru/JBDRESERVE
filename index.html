@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script type="module">
+  // ══════════════════════════════════════════════════════════════
+  //  Firebase 초기화 (고객용 예약접수 페이지 — 로그인 없음)
+  //  이 페이지는 직원 로그인 절차가 없으므로, 페이지 로드 즉시 익명 인증을 실행해
+  //  Firestore 보안 규칙이 "인증된 사용자만 허용"을 걸 수 있도록 한다.
+  // ══════════════════════════════════════════════════════════════
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getFirestore, collection, doc, getDoc, getDocs, setDoc,
+    query, where
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDz3MrnTnJodzl8tyjJkyfdUNBUPNv5Et8",
+    authDomain: "jibokdeukmaru-erp-504904.firebaseapp.com",
+    projectId: "jibokdeukmaru-erp-504904",
+    storageBucket: "jibokdeukmaru-erp-504904.firebasestorage.app",
+    messagingSenderId: "697700684649",
+    appId: "1:697700684649:web:8383f1886b989387f963f8"
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const db = getFirestore(fbApp);
+  const auth = getAuth(fbApp);
+
+  window.FB = {
+    db, auth, collection, doc, getDoc, getDocs, setDoc,
+    query, where
+  };
+
+  let _fbAuthPromise = null;
+  window.fbEnsureAuth = function() {
+    if (auth.currentUser) return Promise.resolve(auth.currentUser);
+    if (_fbAuthPromise) return _fbAuthPromise;
+    _fbAuthPromise = signInAnonymously(auth)
+      .then(cred => cred.user)
+      .catch(err => { console.error('Firebase 익명 인증 실패:', err); _fbAuthPromise = null; throw err; });
+    return _fbAuthPromise;
+  };
+  // 페이지 로드 즉시 인증 시작 (제출 시점에 지연되지 않도록 미리 준비)
+  window.fbEnsureAuth().catch(() => {});
+</script>
+<script>
+// ── 윅스(Wix) iframe 스케일링 보정 (ERP코드.txt와 동일 로직) ──
+(function () {
+  try {
+    if (window.self === window.top) return;
+    var realWidth = (window.screen && window.screen.width) ? window.screen.width : 0;
+    if (!realWidth || realWidth > 900) return;
+    var check = function () {
+      var renderedWidth = document.documentElement.clientWidth;
+      if (renderedWidth > realWidth * 1.25) {
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (meta) {
+          meta.setAttribute('content', 'width=' + realWidth + ', initial-scale=1.0');
+        }
+      }
+    };
+    check();
+    document.addEventListener('DOMContentLoaded', check);
+    window.addEventListener('load', check);
+  } catch (e) { /* 보정 실패해도 페이지 자체는 정상 동작해야 하므로 무시 */ }
+})();
+</script>
+<script>
+// ── Wix iframe 높이 자동 조절 (postMessage) — ERP코드.txt와 동일 로직 ──
+(function () {
+  try {
+    if (window.self === window.top) return;
+    var lastHeight = 0;
+    function sendHeight() {
+      var h = Math.max(
+        document.body.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.scrollHeight,
+        document.documentElement.offsetHeight
+      );
+      if (h === lastHeight) return;
+      lastHeight = h;
+      window.parent.postMessage({ type: 'jbdHEIGHT', height: h }, '*');
+    }
+    document.addEventListener('DOMContentLoaded', sendHeight);
+    window.addEventListener('load', sendHeight);
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(sendHeight);
+      document.addEventListener('DOMContentLoaded', function () { ro.observe(document.body); });
+    }
+    // 300ms → 800ms: Wix가 잦은 높이 변경으로 잘못 계산하는 빈도 줄이기
+    setInterval(sendHeight, 800);
+    window._sendIframeHeight = sendHeight;
+  } catch (e) {}
+})();
+</script>
+<title>상담 예약 | 지복득마루</title>
+<style>
+  /* 폰트 설정 */
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+  /* 마루부리 전체 굵기 지원 공식 웹폰트 연결 */
+  @import url('https://hangeul.pstatic.net/hangeul_static/css/maru-buri.css');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f3ef;
+    --white: #ffffff;
+    --ink: #1a1a1a;
+    --ink-light: #555;
+    --ink-muted: #757575;
+    --accent: #7a5c44;
+    --accent-light: #9b7355;
+    --accent-bg: #f5ede6;
+    --border: #ddd;
+    --border-focus: #7a5c44;
+    --error: #c0392b;
+    --font: 'Noto Serif KR', 'Georgia', '바탕', serif;
+    --font-maru: 'MaruBuri', serif;
+  }
+
+  /* 세미볼드 이상 마루부리 적용 */
+  h1, h2, h3, h4, h5, h6, strong, b, .font-maru, .section-title, .hero-title, .btn-submit, .cal-month, .dp-month {
+    font-family: var(--font-maru);
+    font-weight: 600;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  /* 히어로 이미지 */
+  .hero-section {
+    position: relative;
+    width: 100%;
+    max-height: 360px;
+    overflow: hidden;
+  }
+  .hero-img {
+    width: 100%;
+    height: 360px;
+    object-fit: cover;
+    display: block;
+    filter: brightness(0.62);
+  }
+  .hero-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 40px 24px;
+  }
+  .hero-content {
+    width: 100%;
+    max-width: 680px;
+    text-align: left;
+  }
+  .hero-title {
+    font-size: 36px;
+    color: #fff;
+    margin-bottom: 20px;
+    letter-spacing: 0.02em;
+  }
+  .hero-desc {
+    font-size: 15px;
+    color: rgba(255,255,255,0.88);
+    line-height: 1.9;
+    font-family: var(--font);
+    font-weight: 400;
+    word-break: keep-all;
+    text-align: left;
+  }
+
+  /* FORM WRAPPER */
+  .form-wrap {
+    max-width: 840px;
+    margin: 40px auto 60px;
+    padding: 0 16px;
+  }
+
+  /* NOTICE SECTION (휴무안내 & 안내사항) */
+  .notice-section {
+    background: var(--white);
+    padding: 32px 36px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #dddddd;
+    border-radius: 0;
+  }
+  .notice-section2 {
+    background: none;
+    padding: 32px 36px;
+    margin-bottom: 20px;
+    border: none;
+    border-radius: 0;
+  }
+  .notice-group {
+    margin-bottom: 24px;
+  }
+  .notice-group:last-child {
+    margin-bottom: 0;
+  }
+  .notice-title {
+    font-family: var(--font-maru);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .notice-content {
+    font-size: 15px;
+    color: var(--ink-light);
+    line-height: 1.8;
+  }
+  /* 휴무안내는 관리자가 리치에디터에서 직접 입력한 <b>/<font>가 그대로 들어오는데,
+     사이트 전역 규칙(위 h1~h6, strong, b { font-family: MaruBuri })을 그대로 물려받으면
+     본문 폰트(Noto Serif KR)와 기준선이 달라 볼드 처리된 부분만 아래로 처져 보인다. */
+  .notice-content b,
+  .notice-content strong {
+    font-family: inherit;
+  }
+  .notice-content .notice-emphasis {
+    font-family: var(--font-maru);
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  /* SECTION */
+  .form-section {
+    background: var(--white);
+    border-radius: 0;
+    border: none;
+    padding: 40px 36px;
+    margin-bottom: 0px;
+  }
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--accent);
+  }
+  /* 한 form-section 안에서 다음 소섹션(03/04/05)으로 넘어갈 때 위쪽 여백 — 모바일에서 줄임 */
+  .section-title.section-gap { margin-top: 56px; }
+  .section-title .num {
+    font-family: var(--font-maru);
+    font-weight: 200;
+    font-size: 15px;
+  }
+
+  /* CALENDAR */
+  .cal-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .cal-nav button {
+    background: none;
+    border: none;
+    width: 32px; height: 32px;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--ink-light);
+  }
+  .cal-month {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  .cal-day-label {
+    text-align: center;
+    font-size: 12px;
+    font-family: var(--font-maru);
+    font-weight: 600;
+    color: var(--ink-muted);
+    padding: 8px 0;
+  }
+  .cal-day-label.sun { color: #C93333; }
+
+  .cal-cell {
+    text-align: center;
+    padding: 8px 2px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--ink);
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    border-radius: 0;
+  }
+  .cal-cell:hover:not(.closed):not(.past):not(.empty) { background: var(--accent-bg); }
+  .cal-cell.selected { background: var(--accent); color: #fff; font-weight: 700; }
+
+  /* 지나간 날짜(당일 포함) 오퍼시티 27% — 당일 예약은 유선으로만 가능하므로 당일도 마감 처리 */
+  .cal-cell.past { opacity: 0.27; cursor: not-allowed; }
+  .cal-cell.closed { cursor: not-allowed; }
+  .cal-cell.empty { cursor: default; }
+
+  /* 공휴일 (지나가지 않았다면 100%) */
+  .cal-cell.closed:not(.past) {
+    color: #C93333;
+    cursor: not-allowed;
+    opacity: 1;
+  }
+  .cal-cell.weekday-holiday { background: #F5F3EF; }
+
+  .cal-holiday-name {
+    font-size: 8px;
+    font-family: var(--font-maru);
+    font-weight: 600;
+    line-height: 1.2;
+    margin-top: 2px;
+    word-break: keep-all;
+    white-space: normal;
+    overflow: visible;
+  }
+
+  /* TIME SLOTS */
+  .time-slots {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .time-slot {
+    border: 1px solid var(--border);
+    padding: 12px;
+    text-align: center;
+    font-size: 13px;
+    cursor: pointer;
+    background: var(--white);
+    border-radius: 0;
+  }
+  .time-slot:hover:not(.taken) { border-color: var(--accent); color: var(--accent); }
+  .time-slot.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .time-slot.taken { background: #f9f9f9; color: var(--ink-muted); cursor: not-allowed; text-decoration: line-through; border-color: #eee;}
+  .no-date-msg { text-align: center; color: var(--ink-muted); font-size: 13px; padding: 24px 0; }
+
+  /* FIELDS */
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .field-row.full { grid-template-columns: 1fr; }
+  .field { display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .field label {
+    font-size: 12px;
+    font-family: var(--font-maru);
+    font-weight: 600;
+    color: var(--ink-light);
+  }
+  .field label .req { font-weight:400; color:var(--accent); margin-left: 2px; }
+
+  /* 입력 항목 공통 스타일 */
+  .field input, .field select, .field textarea {
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding: 8px 0;
+    font-size: 12px;
+    font-family: var(--font);
+    color: var(--ink);
+    background: transparent;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+  .field input::placeholder, .field textarea::placeholder {
+    opacity: 0.5;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--border-focus); }
+  .field input.error, .field select.error { border-color: var(--error); }
+
+  /* 텍스트에어리어 (기타 문의) 아웃라인 완전 삭제 */
+  #fMemo { border: none; padding: 12px 0; resize: none; min-height: 80px; }
+
+  /* RADIO / CHECKBOX GROUPS */
+  .radio-group, .check-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .radio-btn, .check-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--ink-light);
+  }
+  .radio-btn input, .check-btn input { display: none; }
+  .radio-btn.active, .check-btn.active {
+    background-color: var(--accent);
+    border: none;
+    font-weight: 400;
+    color: var(--white);
+  }
+
+  /* TOGGLE */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-light);
+    cursor: pointer;
+  }
+  .toggle-box {
+    width: 16px; height: 16px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .toggle-box.checked { background: var(--accent); border-color: var(--accent); }
+  .toggle-box.checked::after { content: '✓'; color: #fff; font-size: 10px; font-weight: 700; }
+
+  /* PRIVACY */
+  .privacy-box {
+    padding: 0 0 20px 0;
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.8;
+    margin-bottom: 12px;
+    border: none;
+    border-radius: 0;
+  }
+
+  /* SUBMIT */
+  .submit-area { text-align: center; margin-top: 0px; }
+  .btn-submit {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 18px 80px;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: 100%;
+    border-radius: 0;
+  }
+  .btn-submit:hover { background: var(--accent-light); }
+  .btn-submit:disabled { background: var(--ink-muted); cursor: not-allowed; }
+
+  /* SUCCESS */
+  .success-screen {
+    display: none;
+    text-align: center;
+    padding: 60px 24px;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+  }
+  .success-screen h2 { font-size: 20px; margin-bottom: 12px; color: var(--accent); }
+  .success-screen p { font-size: 14px; color: var(--ink-light); line-height: 1.8; }
+
+  /* LOADING */
+  .loading-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(255,255,255,0.8);
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    color: var(--accent);
+  }
+  .loading-overlay.show { display: flex; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--accent-bg);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* WORK DATE PICKER */
+  .datepicker-wrap { position: relative; }
+  .datepicker-input {
+    border: none;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+    font-size: 14px;
+    font-family: var(--font);
+    color: var(--ink);
+    background: transparent;
+    width: 100%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+    transition: border-color 0.15s;
+  }
+  .datepicker-input:hover { border-bottom-color: var(--border-focus); }
+  .datepicker-input .placeholder { color: var(--ink-muted); opacity: 0.5; }
+  .datepicker-input .icon { display: flex; align-items: center; color: var(--ink-muted); }
+
+  .datepicker-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: var(--white);
+    border: 1px solid var(--border);
+    padding: 16px;
+    z-index: 200;
+    width: 300px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  }
+  .datepicker-dropdown.open { display: block; }
+  .dp-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .dp-nav button {
+    background: none;
+    border: none;
+    width: 28px; height: 28px;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--ink-light);
+  }
+  .dp-nav button:hover { color: var(--accent); }
+  .dp-month { font-size: 14px; color: var(--accent); }
+  .dp-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .dp-label {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-muted);
+    padding: 4px 0;
+  }
+  .dp-label.sun { color: #C93333; }
+  .dp-label.sat { color: #999999; }
+  .dp-cell {
+    text-align: center;
+    padding: 6px 2px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--ink);
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dp-cell:hover:not(.dp-empty):not(.dp-past) { background: var(--accent-bg); color: var(--accent); }
+  .dp-cell.dp-selected { background: var(--accent); color: #fff; font-weight: 700; }
+  .dp-cell.dp-today:not(.dp-selected) { color: var(--accent); font-weight: 700; }
+  .dp-cell.dp-past { color: var(--ink-muted); opacity: 0.27; cursor: not-allowed; }
+  .dp-cell.dp-empty { cursor: default; }
+
+  .field-error { font-size: 11px; color: var(--error); margin-top: 4px; }
+
+  /* PC(넓은 화면)에서 전체적으로 살짝 더 크게 — 큰 모니터에서 폼이 작아 보이는 문제 보완 */
+  @media (min-width: 900px) {
+    .section-title { font-size: 15px; }
+    .field label { font-size: 13px; }
+    .field input, .field select, .field textarea { font-size: 15px; padding: 10px 0; }
+    .radio-btn, .check-btn { font-size: 13px; padding: 9px 14px; }
+    .notice-title { font-size: 15px; }
+    .notice-content { font-size: 16px; }
+    .btn-submit { font-size: 16px; padding: 20px 80px; }
+    .hero-title { font-size: 40px; }
+    .hero-desc { font-size: 16px; }
+  }
+
+  /* 모바일 — 여백을 줄여서 화면에 더 많은 내용이 보이게(밀도↑), 필요한 곳은 글자도 살짝 축소 */
+  @media (max-width: 480px) {
+    .form-section { padding: 26px 20px; }
+    .notice-section, .notice-section2 { padding: 22px 20px; }
+    .section-title { margin-bottom: 16px; padding-bottom: 8px; }
+    .section-title.section-gap { margin-top: 34px; }
+    .hero-title { font-size: 22px; }
+    .hero-desc { font-size: 12.5px; line-height: 1.7; }
+    .radio-btn, .check-btn { font-size: 11.5px; padding: 7px 10px; }
+    .cal-cell { min-height: 38px; font-size: 12px; }
+    .field-row { grid-template-columns: 1fr; }
+    .time-slots { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <span>접수 중입니다...</span>
+</div>
+
+<!-- 히어로 이미지 섹션 -->
+<div class="hero-section">
+  <img src="https://raw.githubusercontent.com/chiwoo3292-sudo/JBDSTOCK/refs/heads/main/%EC%98%88%EC%95%BD%ED%8F%BC%EC%9D%B4%EB%AF%B8%EC%A7%80.avif" alt="지복득마루 쇼룸" class="hero-img">
+  <div class="hero-overlay">
+    <div class="hero-content">
+      <h2 class="hero-title">상담 예약</h2>
+      <p class="hero-desc">원목마루는 빛과 공간에 따라 다르게 표현됩니다.<br>지복득마루 쇼룸에서 직접 눈으로 확인하고,<br>손으로 질감을 느끼며 가장 솔직한 모습 그대로의 원목을 경험해 보시길 권합니다.</p>
+    </div>
+  </div>
+</div>
+
+<div class="form-wrap">
+
+  <!-- 휴무 안내: 관리자가 매달 시트에 등록한 내용을 그대로 불러온다(getMonthlyNotice).
+       내용이 없는 달에는 섹션 자체를 숨긴다. -->
+  <div class="notice-section" id="monthlyNoticeSection" style="display:none;">
+    <div class="notice-group">
+      <div class="notice-title">휴무 안내</div>
+      <div class="notice-content" id="monthlyNoticeText"></div>
+    </div>
+  </div>
+
+  <div class="notice-section2">
+    <div class="notice-group">
+      <div class="notice-title">안내사항</div>
+      <div class="notice-content">
+        · 당일 예약은 유선으로만 가능합니다. (02-576-7736)<br>
+        · 매장 상황에 따라 대기가 발생할 수 있습니다.
+      </div>
+    </div>
+  </div>
+
+  <div id="mainForm">
+
+    <!-- 01 예약 일정 -->
+    <div class="form-section">
+      <div class="section-title"><span class="num">01</span>&nbsp;&nbsp;예약 일정</div>
+
+      <div class="cal-nav">
+        <button id="prevMonth">‹</button>
+        <span class="cal-month" id="calMonthLabel"></span>
+        <button id="nextMonth">›</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div id="timeSlotArea">
+        <div class="no-date-msg">날짜를 선택해주세요</div>
+      </div>
+    </div>
+
+    <!-- 하나의 박스로 합친 정보 입력 영역 (02 ~ 05) -->
+    <div class="form-section">
+
+      <!-- 02 예약자 정보 -->
+      <div class="section-title"><span class="num">02</span>&nbsp;&nbsp;예약자 정보</div>
+
+      <div class="field-row">
+        <div class="field" style="grid-column: 1 / -1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label>예약자 유형 <span class="req">*</span></label>
+            <div class="toggle-row" id="revisitToggle">
+              <div class="toggle-box" id="revisitBox"></div>
+              <span>재방문</span>
+            </div>
+          </div>
+          <div class="radio-group" id="visitorTypeGroup">
+            <label class="radio-btn active" data-val="개인 소비자">
+              <input type="radio" name="visitorType" value="개인 소비자" checked> 개인 소비자
+            </label>
+            <label class="radio-btn" data-val="인테리어업체">
+              <input type="radio" name="visitorType" value="인테리어업체"> 인테리어업체
+            </label>
+            <label class="radio-btn" data-val="건축사무소">
+              <input type="radio" name="visitorType" value="건축사무소"> 건축사무소
+            </label>
+            <label class="radio-btn" data-val="건설사">
+              <input type="radio" name="visitorType" value="건설사"> 건설사
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row" style="margin-bottom:28px;">
+        <div class="field" style="grid-column: 1 / -1;">
+          <label>방문 인원</label>
+          <div class="radio-group" id="visitCountGroup">
+            <label class="radio-btn active" data-val="1명 (개인)">
+              <input type="radio" name="visitCount" value="1명 (개인)" checked> 1명 (개인)
+            </label>
+            <label class="radio-btn" data-val="2명">
+              <input type="radio" name="visitCount" value="2명"> 2명
+            </label>
+            <label class="radio-btn" data-val="3명">
+              <input type="radio" name="visitCount" value="3명"> 3명
+            </label>
+            <label class="radio-btn" data-val="4명">
+              <input type="radio" name="visitCount" value="4명"> 4명
+            </label>
+            <label class="radio-btn" data-val="5인 이상">
+              <input type="radio" name="visitCount" value="5인 이상"> 5인 이상
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row" style="margin-bottom:28px;">
+        <div class="field">
+          <label>예약자 성함 <span class="req">*</span></label>
+          <input type="text" id="fName" placeholder="홍길동">
+          <span class="field-error" id="errName"></span>
+        </div>
+        <div class="field">
+          <label>연락처 <span class="req">*</span></label>
+          <input type="tel" id="fPhone" placeholder="010-0000-0000">
+          <span class="field-error" id="errPhone"></span>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>업체명</label>
+          <input type="text" id="fCompany">
+        </div>
+      </div>
+
+      <!-- 03 시공 정보 -->
+      <div class="section-title section-gap"><span class="num">03</span>&nbsp;&nbsp;시공 정보</div>
+
+      <div class="field-row full">
+        <div class="field">
+          <label>현장 주소</label>
+          <input type="text" id="fAddress" placeholder="서울시 강남구 **아파트 101동 1101호">
+        </div>
+      </div>
+
+      <div class="field-row full">
+        <div class="field">
+          <label>평수</label>
+          <input type="text" id="fSize" placeholder="예: 35평">
+        </div>
+      </div>
+
+      <div class="field-row full" style="margin-bottom:24px;">
+        <div class="field">
+          <label>마루 시공 예정일</label>
+          <div class="datepicker-wrap" id="workDateWrap">
+            <div class="datepicker-input" id="workDateInput">
+              <span id="workDateDisplay" class="placeholder" style="font-size: 12px;">날짜를 선택해주세요</span>
+              <span class="icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+              </span>
+            </div>
+            <div class="datepicker-dropdown" id="workDateDropdown">
+              <div class="dp-nav">
+                <button id="dpPrev">‹</button>
+                <span class="dp-month" id="dpMonthLabel"></span>
+                <button id="dpNext">›</button>
+              </div>
+              <div class="dp-grid" id="dpGrid"></div>
+            </div>
+          </div>
+          <input type="hidden" id="fWorkDate">
+        </div>
+      </div>
+
+      <div class="field-row full">
+        <div class="field">
+          <label>공사 기간</label>
+          <input type="text" id="fWorkPeriod" placeholder="예: 2주, 10/1~10/14">
+        </div>
+      </div>
+
+      <!-- 04 전달 사항 -->
+      <div class="section-title section-gap"><span class="num">04</span>&nbsp;&nbsp;전달 사항</div>
+      <div class="field full">
+        <label>기타 문의 및 전달 사항</label>
+        <textarea id="fMemo" placeholder="궁금한 점이나 전달하실 내용을 자유롭게 입력해주세요."></textarea>
+      </div>
+
+      <!-- 05 개인정보 동의 -->
+      <div class="section-title section-gap"><span class="num">05</span>&nbsp;&nbsp;개인정보 활용 동의</div>
+      <div class="privacy-box">
+        수집하는 개인정보 항목 : 성함, 연락처, 주소, 시공 현장 정보 등<br>
+        수집 및 이용 목적 : 상담 예약 확인 및 시공 및 AS서비스 제공<br>
+        귀하는 개인정보 수집·이용에 대한 동의를 거부하실 수 있으나, 동의 거부 시 서비스 이용이 제한됩니다.
+      </div>
+      <div class="toggle-row" id="privacyToggle">
+        <div class="toggle-box" id="privacyBox"></div>
+        <span>개인정보 수집 및 활용에 동의합니다.</span> <span class="req">*</span>
+      </div>
+      <span class="field-error" style="position:static; display:block; margin-top:8px;" id="errPrivacy"></span>
+    </div>
+
+    <div class="submit-area">
+        <button class="btn-submit" id="btnSubmit">예약 접수하기</button>
+    </div>
+
+  </div><!-- /mainForm -->
+
+  <div class="success-screen" id="successScreen">
+    <h2 class="font-maru">예약 접수 완료</h2>
+    <p>
+      상담 예약이 정상적으로 접수되었습니다.<br>
+      문의 : 02-576-7736 / 010-5264-7736<br><br>
+      감사합니다. <strong>지복득마루</strong>
+    </p>
+  </div>
+
+</div><!-- /form-wrap -->
+
+<script>
+// ★ 예약스크립트.txt를 새 Apps Script 프로젝트로 배포한 뒤 실제 /exec URL로 교체할 것 ★
+//   (이 페이지가 쓰는 액션(submit/getSlots/getHolidays/getMonthlyNotice/sendEmail)이
+//   전부 예약전용 스크립트로 이전됨 — 예약페이지 트래픽을 사내업무 백엔드와 분리하기 위함)
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwV05wsaLKcjnJeBL5eaK38O32UeIiha67ni1LbqFaXap-t8K1sTDD6EIzLVBczRKxO/exec';
+
+// ─────────────────────────────────────────
+// 월별 휴무안내
+// ─────────────────────────────────────────
+// 휴무안내는 관리자 화면(ERP)의 리치텍스트 편집기(contenteditable)에서 굵게/색상을 직접
+// 지정해 저장한 HTML이므로, 그대로 innerHTML에 반영한다(관리자 전용 입력이라 신뢰).
+async function loadMonthlyNotice() {
+  try {
+    await _waitForFirebase();
+    await window.fbEnsureAuth();
+    const { db, doc, getDoc } = window.FB;
+    const snap = await getDoc(doc(db, 'settings', 'monthlyNotice'));
+    if (snap.exists()) {
+      const data = snap.data();
+      const now = new Date();
+      const key = `${now.getFullYear()}_${now.getMonth() + 1}`;
+      const noticeText = data[key] || '';
+      if (!noticeText.trim()) return;
+      const section = document.getElementById('monthlyNoticeSection');
+      const text = document.getElementById('monthlyNoticeText');
+      if (section && text) {
+        text.innerHTML = noticeText;
+        section.style.display = '';
+      }
+    }
+  } catch(e) { /* 조용히 무시 — 없어도 예약 진행에는 지장 없음 */ }
+}
+
+// ─────────────────────────────────────────
+// 슬롯 설정
+// 형식: { "YYYY-MM-DD": ["09:00~10:00", "10:00~11:00", ...] }
+// false = 해당 날짜 비활성 / [] = 슬롯없음
+// ─────────────────────────────────────────
+const SLOT_CONFIG = {
+  // 운영: 월~토 (일요일 휴무)
+  // 평일(월~금): 10:00~17:00, 30분 단위 = 14개 슬롯
+  _defaultWeekday: [
+    "10:00~10:30","10:30~11:00",
+    "11:00~11:30","11:30~12:00",
+    "12:00~12:30","12:30~13:00",
+    "13:00~13:30","13:30~14:00",
+    "14:00~14:30","14:30~15:00",
+    "15:00~15:30","15:30~16:00",
+    "16:00~16:30","16:30~17:00"
+  ],
+  // 토요일: 10:00~16:00, 30분 단위 = 12개 슬롯 (평일보다 2개 적음)
+  _defaultSaturday: [
+    "10:00~10:30","10:30~11:00",
+    "11:00~11:30","11:30~12:00",
+    "12:00~12:30","12:30~13:00",
+    "13:00~13:30","13:30~14:00",
+    "14:00~14:30","14:30~15:00",
+    "15:00~15:30","15:30~16:00"
+  ],
+  _closedDays: [0], // 0=일요일만 휴무 (공휴일은 별도로 holidayMap에서 처리)
+};
+
+// 요일(0~6)에 맞는 기본 슬롯 목록 반환 (일요일은 빈 배열)
+function getDefaultSlotsForDow(dow) {
+  if (dow === 0) return [];
+  if (dow === 6) return SLOT_CONFIG._defaultSaturday;
+  return SLOT_CONFIG._defaultWeekday;
+}
+
+// ★ 매주 금요일 오전 4개 슬롯은 기본 마감 — 서버(예약스크립트)의 _computeSlotsForDate와 동일 규칙.
+//   관리자가 그 날짜를 한 번이라도 저장해서 Firestore 문서가 생겼다면 그 문서 내용을 그대로 믿으면 되지만,
+//   아직 한 번도 저장 안 한(문서가 없는) 미래의 금요일은 이 기본값을 클라이언트에서 직접 적용해야 한다.
+const FRIDAY_MORNING_CLOSE_SLOTS = ['10:00~10:30', '10:30~11:00', '11:00~11:30', '11:30~12:00'];
+function isFridayDateStr(dateStr) {
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return false;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getDay() === 5;
+}
+
+// ★ Firebase 초기화는 <script type="module">이라 문서 파싱이 끝난 뒤 실행된다.
+//   이 페이지 하단의 initCalendar() 같은 일반 스크립트는 그보다 먼저 실행될 수 있어서,
+//   window.fbEnsureAuth가 아직 없는 채로 호출되면 공휴일/휴무안내/슬롯 로딩이 조용히 실패한다.
+//   그래서 Firestore를 읽는 함수들은 먼저 이 헬퍼로 모듈 스크립트 실행을 기다린다.
+function _waitForFirebase() {
+  if (window.fbEnsureAuth && window.FB) return Promise.resolve();
+  return new Promise(resolve => {
+    const iv = setInterval(() => {
+      if (window.fbEnsureAuth && window.FB) { clearInterval(iv); resolve(); }
+    }, 30);
+  });
+}
+
+// ─────────────────────────────────────────
+// 공휴일 (구글시트 [공휴일] 시트 연동)
+// ─────────────────────────────────────────
+let holidayMap = {}; // { "2026-01-01": "신정", ... }
+
+async function loadHolidays() {
+  try {
+    await _waitForFirebase();
+    await window.fbEnsureAuth();
+    const { db, doc, getDoc } = window.FB;
+    const snap = await getDoc(doc(db, 'settings', 'holidays'));
+    holidayMap = snap.exists() ? snap.data() : {};
+  } catch (e) {
+    console.warn('공휴일 정보 로드 실패:', e.message);
+    holidayMap = {};
+  }
+}
+
+// ─────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────
+let curYear, curMonth, selectedDate = null, selectedTime = null;
+let revisit = false, privacyAgree = false;
+let visitorType = '개인 소비자', visitCount = '1명 (개인)';
+let bookedSlots = {};
+
+// ─────────────────────────────────────────
+// CALENDAR
+// ─────────────────────────────────────────
+async function initCalendar() {
+  const now = new Date();
+  curYear = now.getFullYear();
+  curMonth = now.getMonth();
+  await loadHolidays();
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const label = document.getElementById('calMonthLabel');
+  label.textContent = `${curYear}년 ${curMonth + 1}월`;
+
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = '';
+
+  const days = ['일','월','화','수','목','금','토'];
+  days.forEach((d, i) => {
+    const el = document.createElement('div');
+    el.className = 'cal-day-label' + (i === 0 ? ' sun' : i === 6 ? ' sat' : '');
+    el.textContent = d;
+    grid.appendChild(el);
+  });
+
+  const firstDay = new Date(curYear, curMonth, 1).getDay();
+  const daysInMonth = new Date(curYear, curMonth + 1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  for (let i = 0; i < firstDay; i++) {
+    const el = document.createElement('div');
+    el.className = 'cal-cell empty';
+    grid.appendChild(el);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(curYear, curMonth, d);
+    const dateStr = formatDate(curYear, curMonth + 1, d);
+    const dow = date.getDay();
+    const holidayName = holidayMap[dateStr];
+    const el = document.createElement('div');
+
+    let cls = 'cal-cell';
+    if (holidayName) {
+      cls += ' holiday';
+      if (dow !== 0) cls += ' weekday-holiday';
+      el.innerHTML = `${d}<div class="cal-holiday-name">${holidayName}</div>`;
+    } else {
+      el.textContent = d;
+    }
+
+    if (date <= today) cls += ' past'; // 오늘 포함 과거 전체 비활성 (당일 예약은 유선으로만 가능)
+    else if (holidayName || SLOT_CONFIG._closedDays.includes(dow)) cls += ' closed'; // 공휴일 또는 일요일은 예약 마감
+    else {
+      if (selectedDate === dateStr) cls += ' selected';
+      el.addEventListener('click', () => selectDate(dateStr));
+    }
+
+    el.className = cls;
+    grid.appendChild(el);
+  }
+}
+
+async function selectDate(dateStr) {
+  selectedDate = dateStr;
+  selectedTime = null;
+  renderCalendar();
+
+  // ★ 공휴일이면 서버 조회 없이 바로 마감 표시
+  if (holidayMap[dateStr]) {
+    document.getElementById('timeSlotArea').innerHTML =
+      `<div class="no-date-msg">해당 날짜는 공휴일(${holidayMap[dateStr]})로 휴무입니다.</div>`;
+    return;
+  }
+
+  // 로딩 표시
+  document.getElementById('timeSlotArea').innerHTML = '<div class="no-date-msg">예약가능 시간 불러오는 중...</div>';
+
+  // Firestore에서 해당 날짜 closed 슬롯 조회
+  try {
+    await _waitForFirebase();
+    await window.fbEnsureAuth();
+    const { db, doc, getDoc } = window.FB;
+    const snap = await getDoc(doc(db, 'slots', dateStr));
+    if (snap.exists()) {
+      const result = snap.data();
+      if (result.dayClosed) {
+        document.getElementById('timeSlotArea').innerHTML = '<div class="no-date-msg">해당 날짜는 예약이 마감되었습니다.</div>';
+        return;
+      }
+      // closed 슬롯을 bookedSlots에 반영
+      bookedSlots[dateStr] = result.closedSlots || [];
+    } else {
+      // 문서가 아직 없는 날짜 — 금요일이면 오전 기본마감 규칙을 적용, 그 외엔 전체 오픈
+      bookedSlots[dateStr] = isFridayDateStr(dateStr) ? FRIDAY_MORNING_CLOSE_SLOTS.slice() : [];
+    }
+  } catch (e) {
+    // 네트워크 오류 시에도 금요일 기본마감 규칙은 유지
+    bookedSlots[dateStr] = isFridayDateStr(dateStr) ? FRIDAY_MORNING_CLOSE_SLOTS.slice() : (bookedSlots[dateStr] || []);
+  }
+
+  renderTimeSlots(dateStr);
+}
+
+function renderTimeSlots(dateStr) {
+  const area = document.getElementById('timeSlotArea');
+
+  // 방어적 처리: 어떤 경로로든 공휴일 날짜가 들어오면 바로 마감 표시
+  if (holidayMap[dateStr]) {
+    area.innerHTML = `<div class="no-date-msg">해당 날짜는 공휴일(${holidayMap[dateStr]})로 휴무입니다.</div>`;
+    return;
+  }
+
+  const dm = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const dow = dm ? new Date(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3])).getDay() : new Date(dateStr).getDay();
+
+  const slots = SLOT_CONFIG[dateStr] !== undefined
+    ? SLOT_CONFIG[dateStr]
+    : getDefaultSlotsForDow(dow); // 평일 14개 / 토요일 12개 / 일요일 0개
+
+  if (!slots || slots.length === 0) {
+    area.innerHTML = '<div class="no-date-msg">해당 날짜는 예약 가능한 시간이 없습니다.</div>';
+    return;
+  }
+
+  // 오늘 날짜인 경우 현재 시각 이전 슬롯 비활성화
+  const now = new Date();
+  const todayStr = formatDate(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  const isToday = dateStr === todayStr;
+  const curMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const booked = bookedSlots[dateStr] || [];
+  let html = '<div class="time-slots">';
+  slots.forEach(slot => {
+    const taken = booked.includes(slot);
+    // 오늘이면 슬롯 시작시간이 현재 시각 이전이면 비활성
+    let isPast = false;
+    if (isToday) {
+      const startStr = slot.split('~')[0]; // "10:30"
+      const [h, m] = startStr.split(':').map(Number);
+      isPast = (h * 60 + m) <= curMinutes;
+    }
+    const sel = selectedTime === slot;
+    const cls = (taken || isPast) ? ' taken' : sel ? ' selected' : '';
+    html += `<div class="time-slot${cls}" data-slot="${slot}">${slot}</div>`;
+  });
+  html += '</div>';
+  area.innerHTML = html;
+
+  area.querySelectorAll('.time-slot:not(.taken)').forEach(el => {
+    el.addEventListener('click', () => {
+      selectedTime = el.dataset.slot;
+      renderTimeSlots(dateStr);
+    });
+  });
+}
+
+document.getElementById('prevMonth').addEventListener('click', () => {
+  curMonth--; if (curMonth < 0) { curMonth = 11; curYear--; }
+  renderCalendar();
+  document.getElementById('timeSlotArea').innerHTML = '<div class="no-date-msg">날짜를 선택해주세요</div>';
+  selectedDate = null; selectedTime = null;
+});
+document.getElementById('nextMonth').addEventListener('click', () => {
+  curMonth++; if (curMonth > 11) { curMonth = 0; curYear++; }
+  renderCalendar();
+  document.getElementById('timeSlotArea').innerHTML = '<div class="no-date-msg">날짜를 선택해주세요</div>';
+  selectedDate = null; selectedTime = null;
+});
+
+// ─────────────────────────────────────────
+// RADIO / TOGGLE
+// ─────────────────────────────────────────
+function bindRadioGroup(groupId, onChange) {
+  document.getElementById(groupId).querySelectorAll('.radio-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById(groupId).querySelectorAll('.radio-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      btn.querySelector('input').checked = true;
+      onChange(btn.dataset.val);
+    });
+  });
+}
+bindRadioGroup('visitorTypeGroup', v => visitorType = v);
+bindRadioGroup('visitCountGroup', v => visitCount = v);
+
+document.getElementById('revisitToggle').addEventListener('click', () => {
+  revisit = !revisit;
+  document.getElementById('revisitBox').className = 'toggle-box' + (revisit ? ' checked' : '');
+});
+
+document.getElementById('privacyToggle').addEventListener('click', () => {
+  privacyAgree = !privacyAgree;
+  document.getElementById('privacyBox').className = 'toggle-box' + (privacyAgree ? ' checked' : '');
+  document.getElementById('errPrivacy').textContent = '';
+});
+
+// 전화번호 자동 하이픈
+document.getElementById('fPhone').addEventListener('input', function() {
+  let v = this.value.replace(/\D/g, '');
+  if (v.length <= 3) this.value = v;
+  else if (v.length <= 7) this.value = v.slice(0,3) + '-' + v.slice(3);
+  else this.value = v.slice(0,3) + '-' + v.slice(3,7) + '-' + v.slice(7,11);
+});
+
+// ─────────────────────────────────────────
+// SUBMIT
+// ─────────────────────────────────────────
+document.getElementById('btnSubmit').addEventListener('click', submitForm);
+
+function validate() {
+  let ok = true;
+  let firstErrorEl = null;
+
+  const name = document.getElementById('fName').value.trim();
+  const phone = document.getElementById('fPhone').value.trim();
+
+  // 에러 초기화
+  document.getElementById('errName').textContent = '';
+  document.getElementById('errPhone').textContent = '';
+  document.getElementById('errPrivacy').textContent = '';
+  document.getElementById('fName').classList.remove('error');
+  document.getElementById('fPhone').classList.remove('error');
+
+  // 날짜/시간 체크
+  if (!selectedDate || !selectedTime) {
+    const calSection = document.querySelector('.form-section');
+    calSection.style.outline = '2px solid #c0392b';
+    if (!firstErrorEl) firstErrorEl = calSection;
+    // 안내 메시지
+    let msg = document.getElementById('calErrMsg');
+    if (!msg) {
+      msg = document.createElement('div');
+      msg.id = 'calErrMsg';
+      msg.style.cssText = 'color:#c0392b;font-size:12px;margin-top:8px;text-align:center;';
+      document.getElementById('timeSlotArea').after(msg);
+    }
+    msg.textContent = !selectedDate ? '상담 날짜를 선택해주세요.' : '상담 시간을 선택해주세요.';
+    ok = false;
+  } else {
+    const calSection = document.querySelector('.form-section');
+    calSection.style.outline = '';
+    const msg = document.getElementById('calErrMsg');
+    if (msg) msg.textContent = '';
+  }
+
+  // 성함
+  if (!name) {
+    document.getElementById('errName').textContent = '성함을 입력해주세요.';
+    document.getElementById('fName').classList.add('error');
+    if (!firstErrorEl) firstErrorEl = document.getElementById('fName');
+    ok = false;
+  }
+
+  // 연락처
+  if (!phone || !/^01[0-9]-\d{3,4}-\d{4}$/.test(phone)) {
+    document.getElementById('errPhone').textContent = '올바른 연락처를 입력해주세요.';
+    document.getElementById('fPhone').classList.add('error');
+    if (!firstErrorEl) firstErrorEl = document.getElementById('fPhone');
+    ok = false;
+  }
+
+  // 개인정보 동의
+  if (!privacyAgree) {
+    document.getElementById('errPrivacy').textContent = '개인정보 활용에 동의해주세요.';
+    if (!firstErrorEl) firstErrorEl = document.getElementById('privacyToggle');
+    ok = false;
+  }
+
+  // 첫 번째 오류 위치로 스크롤
+  if (firstErrorEl) {
+    firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  return ok;
+}
+
+async function submitForm() {
+  if (!validate()) return;
+
+  const payload = {
+    date: selectedDate,
+    time: selectedTime,
+    visitorType,
+    visitCount,
+    revisit: revisit ? '재방문' : '신규',
+    name: document.getElementById('fName').value.trim(),
+    phone: document.getElementById('fPhone').value.trim(),
+    company: document.getElementById('fCompany').value.trim(),
+    address: document.getElementById('fAddress').value.trim(),
+    size: document.getElementById('fSize').value.trim(),
+    workDate: document.getElementById('fWorkDate').value.trim(),
+    workPeriod: document.getElementById('fWorkPeriod').value.trim(),
+    memo: document.getElementById('fMemo').value.trim(),
+    submittedAt: new Date().toLocaleString('ko-KR'),
+  };
+
+  document.getElementById('loadingOverlay').classList.add('show');
+
+  try {
+    // 구글시트(예약접수) 저장 — 직원이 실제로 업무에 사용하는 원장. 여기서 실패하면
+    // (예: 휴무일 재검증 실패, 네트워크 오류) 접수 자체를 중단하고 고객에게 알린다.
+    const submitParams = new URLSearchParams({ action: 'submit', ...payload });
+    let sheetData;
+    try {
+      const sheetRes = await fetch(`${APPS_SCRIPT_URL}?${submitParams.toString()}`);
+      sheetData = await sheetRes.json();
+    } catch (netErr) {
+      throw new Error('예약 시트 저장 중 네트워크 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    }
+    if (!sheetData || sheetData.status !== 'ok') {
+      throw new Error((sheetData && sheetData.message) || '예약 접수에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    }
+    const sheetReceiptNo = sheetData.receiptNo;
+
+    await window.fbEnsureAuth();
+
+    // 접수번호 생성: 오늘 날짜(yyyyMMdd) 기준 접수 건수 + 1
+    const today = new Date();
+    const todayKey = today.getFullYear()
+      + String(today.getMonth()+1).padStart(2,'0')
+      + String(today.getDate()).padStart(2,'0');
+    const todayQuery = window.FB.query(
+      window.FB.collection(window.FB.db, 'reservations'),
+      window.FB.where('submittedDateKey', '==', todayKey)
+    );
+    const todaySnap = await window.FB.getDocs(todayQuery);
+    const receiptNo = `RES-${todayKey}-${String(todaySnap.size + 1).padStart(3, '0')}`;
+
+    // 예약 문서 저장 (문서 ID = 접수번호)
+    const ref = window.FB.doc(window.FB.db, 'reservations', receiptNo);
+    await window.FB.setDoc(ref, {
+      ...payload,
+      receiptNo,
+      sheetReceiptNo,
+      submittedDateKey: todayKey,
+      submittedAtMs: Date.now(),
+      status: '대기'
+    });
+
+    // 신규 트리거: 이메일 발송 (기존 앱스스크립트 그대로 유지 — Firestore와 무관)
+    const emailParams = new URLSearchParams({ action: 'sendEmail', ...payload, receiptNo: sheetReceiptNo });
+    fetch(`${APPS_SCRIPT_URL}?${emailParams.toString()}`).catch(() => {});
+
+    showSuccess(sheetReceiptNo);
+  } catch (e) {
+    alert('접수 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n' + e.message);
+  } finally {
+    document.getElementById('loadingOverlay').classList.remove('show');
+  }
+}
+
+function showSuccess(receiptNo) {
+  document.getElementById('mainForm').style.display = 'none';
+  document.querySelector('.notice-section').style.display = 'none';
+  document.querySelector('.notice-section2').style.display = 'none';
+  const s = document.getElementById('successScreen');
+  s.style.display = 'block';
+  // 폼이 사라지며 페이지 높이가 줄어든 뒤(레이아웃 반영 후) 맨 위로 즉시 이동.
+  //   smooth 애니메이션은 높이 급변과 겹쳐 엉뚱한 위치에 멈출 수 있어 즉시 이동으로 처리.
+  requestAnimationFrame(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    // ★ 이건 iframe 안쪽 스크롤일 뿐이다 — 윅스에 임베드된 상태에서는 실제로 스크롤되고 있는
+    //   건 바깥 부모 페이지라서, 이것만으론 화면이 위로 안 올라간다. 부모(윅스)에게도
+    //   맨 위로 스크롤해달라고 요청한다(ERP코드.txt의 jbdSCROLLTOP과 동일한 방식).
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'jbdSCROLLTOP' }, '*');
+      }
+    } catch (e) {}
+  });
+}
+
+// ─────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────
+function formatDate(y, m, d) {
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+// ─────────────────────────────────────────
+// WORK DATE DATEPICKER
+// ─────────────────────────────────────────
+let dpYear, dpMonth, selectedWorkDate = null;
+
+function initDatepicker() {
+  const now = new Date();
+  dpYear = now.getFullYear();
+  dpMonth = now.getMonth();
+  renderDp();
+}
+
+function renderDp() {
+  const label = document.getElementById('dpMonthLabel');
+  label.textContent = `${dpYear}년 ${dpMonth + 1}월`;
+  const grid = document.getElementById('dpGrid');
+  grid.innerHTML = '';
+
+  const days = ['일','월','화','수','목','금','토'];
+  days.forEach((d, i) => {
+    const el = document.createElement('div');
+    el.className = 'dp-label' + (i===0?' sun':i===6?' sat':'');
+    el.textContent = d;
+    grid.appendChild(el);
+  });
+
+  const firstDay = new Date(dpYear, dpMonth, 1).getDay();
+  const daysInMonth = new Date(dpYear, dpMonth + 1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  for (let i = 0; i < firstDay; i++) {
+    const el = document.createElement('div');
+    el.className = 'dp-cell dp-empty';
+    grid.appendChild(el);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(dpYear, dpMonth, d);
+    const dateStr = formatDate(dpYear, dpMonth + 1, d);
+    const el = document.createElement('div');
+    el.textContent = d;
+    let cls = 'dp-cell';
+    if (date < today) cls += ' dp-past';
+    else {
+      if (date.toDateString() === today.toDateString()) cls += ' dp-today';
+      if (selectedWorkDate === dateStr) cls += ' dp-selected';
+      el.addEventListener('click', () => {
+        selectedWorkDate = dateStr;
+        const [y, m, dd] = dateStr.split('-');
+        document.getElementById('workDateDisplay').textContent = `${y}년 ${parseInt(m)}월 ${parseInt(dd)}일`;
+        document.getElementById('workDateDisplay').classList.remove('placeholder');
+        document.getElementById('fWorkDate').value = dateStr;
+        document.getElementById('workDateDropdown').classList.remove('open');
+        renderDp();
+      });
+    }
+    el.className = cls;
+    grid.appendChild(el);
+  }
+}
+
+document.getElementById('workDateInput').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('workDateDropdown').classList.toggle('open');
+  renderDp();
+});
+document.getElementById('dpPrev').addEventListener('click', (e) => {
+  e.stopPropagation();
+  dpMonth--; if (dpMonth < 0) { dpMonth = 11; dpYear--; }
+  renderDp();
+});
+document.getElementById('dpNext').addEventListener('click', (e) => {
+  e.stopPropagation();
+  dpMonth++; if (dpMonth > 11) { dpMonth = 0; dpYear++; }
+  renderDp();
+});
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('workDateWrap').contains(e.target)) {
+    document.getElementById('workDateDropdown').classList.remove('open');
+  }
+});
+
+// INIT
+initCalendar();
+initDatepicker();
+window.addEventListener('load', () => loadMonthlyNotice());
+</script>
+</body>
+</html>
