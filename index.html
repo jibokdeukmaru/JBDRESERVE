@@ -680,13 +680,22 @@
 
       <div class="field-row">
         <div class="field" style="grid-column: 1 / -1;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <label>예약자 유형 <span class="req">*</span></label>
-            <div class="toggle-row" id="revisitToggle">
-              <div class="toggle-box" id="revisitBox"></div>
-              <span>재방문</span>
-            </div>
+          <label>방문여부 <span class="req">*</span></label>
+          <div class="radio-group" id="visitStatusGroup">
+            <label class="radio-btn" data-val="신규">
+              <input type="radio" name="visitStatus" value="신규"> 신규
+            </label>
+            <label class="radio-btn" data-val="재방문">
+              <input type="radio" name="visitStatus" value="재방문"> 재방문
+            </label>
           </div>
+          <span class="field-error" id="errVisitStatus"></span>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field" style="grid-column: 1 / -1;">
+          <label>예약자 유형 <span class="req">*</span></label>
           <div class="radio-group" id="visitorTypeGroup">
             <label class="radio-btn active" data-val="개인 소비자">
               <input type="radio" name="visitorType" value="개인 소비자" checked> 개인 소비자
@@ -951,7 +960,7 @@ async function loadHolidays() {
 // STATE
 // ─────────────────────────────────────────
 let curYear, curMonth, selectedDate = null, selectedTime = null;
-let revisit = false, privacyAgree = false;
+let revisit = null, privacyAgree = false; // revisit: null=미선택(필수 검증용), false=신규, true=재방문
 let visitorType = '개인 소비자', visitCount = '1명 (개인)';
 let bookedSlots = {};
 
@@ -1142,9 +1151,9 @@ function bindRadioGroup(groupId, onChange) {
 bindRadioGroup('visitorTypeGroup', v => visitorType = v);
 bindRadioGroup('visitCountGroup', v => visitCount = v);
 
-document.getElementById('revisitToggle').addEventListener('click', () => {
-  revisit = !revisit;
-  document.getElementById('revisitBox').className = 'toggle-box' + (revisit ? ' checked' : '');
+bindRadioGroup('visitStatusGroup', v => {
+  revisit = (v === '재방문');
+  document.getElementById('errVisitStatus').textContent = '';
 });
 
 document.getElementById('privacyToggle').addEventListener('click', () => {
@@ -1200,6 +1209,13 @@ function validate() {
     calSection.style.outline = '';
     const msg = document.getElementById('calErrMsg');
     if (msg) msg.textContent = '';
+  }
+
+  // 방문여부 (신규/재방문 필수 선택)
+  if (revisit === null) {
+    document.getElementById('errVisitStatus').textContent = '방문여부를 선택해주세요.';
+    if (!firstErrorEl) firstErrorEl = document.getElementById('visitStatusGroup');
+    ok = false;
   }
 
   // 성함
