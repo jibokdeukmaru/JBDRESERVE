@@ -1249,8 +1249,17 @@ function validate() {
   return ok;
 }
 
+// ★ 재진입 방지 — 제출 처리 중엔 버튼을 비활성화해서, 로딩화면이 뜨기 전 짧은 순간에
+//   여러 번 눌러도(특히 모바일 연타) submitForm() 전체가 중복 실행되지 않게 한다.
+//   (ERP 상담저장의 _saveConsultBusy와 같은 패턴 — 예약 접수/이메일 발송이 클릭 횟수만큼
+//   중복 발생하던 문제)
+let _submitBusy = false;
 async function submitForm() {
+  if (_submitBusy) return;
   if (!validate()) return;
+  _submitBusy = true;
+  const btnSubmit = document.getElementById('btnSubmit');
+  if (btnSubmit) btnSubmit.disabled = true;
 
   const payload = {
     date: selectedDate,
@@ -1321,6 +1330,8 @@ async function submitForm() {
     alert('접수 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n' + e.message);
   } finally {
     document.getElementById('loadingOverlay').classList.remove('show');
+    _submitBusy = false;
+    if (btnSubmit) btnSubmit.disabled = false;
   }
 }
 
