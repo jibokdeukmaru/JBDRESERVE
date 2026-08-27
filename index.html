@@ -1259,7 +1259,8 @@ async function submitForm() {
   if (!validate()) return;
   _submitBusy = true;
   const btnSubmit = document.getElementById('btnSubmit');
-  if (btnSubmit) btnSubmit.disabled = true;
+  const btnSubmitOrigText = btnSubmit ? btnSubmit.textContent : '';
+  if (btnSubmit) { btnSubmit.disabled = true; btnSubmit.textContent = '접수 중...'; }
 
   const payload = {
     date: selectedDate,
@@ -1331,11 +1332,12 @@ async function submitForm() {
   } finally {
     document.getElementById('loadingOverlay').classList.remove('show');
     _submitBusy = false;
-    if (btnSubmit) btnSubmit.disabled = false;
+    if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.textContent = btnSubmitOrigText; }
   }
 }
 
 function showSuccess(receiptNo) {
+  if (navigator.vibrate) navigator.vibrate(150);
   document.getElementById('mainForm').style.display = 'none';
   document.querySelector('.notice-section').style.display = 'none';
   document.querySelector('.notice-section2').style.display = 'none';
