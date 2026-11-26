@@ -1299,28 +1299,34 @@ async function submitForm() {
 
     await window.fbEnsureAuth();
 
-    // 접수번호 생성: 오늘 날짜(yyyyMMdd) 기준 접수 건수 + 1
+    // 접수번호: 예약시트(Apps Script)가 이미 같은 형식(RES-yyyyMMdd-NNN)으로 만들어 준 번호를 그대로 쓴다.
+    // ★ (2026-11-26 보안) 예전엔 여기서 "오늘 접수건수"를 세려고 reservations 목록을 브라우저에서
+    //   직접 읽었는데, 그 때문에 아무 방문자나 다른 고객의 예약(이름·연락처·주소)을 읽을 수 있었다.
+    //   이제 이 페이지는 예약을 "새로 만들기"만 하고, 목록 읽기는 보안규칙에서 직원 전용으로 막는다.
     const today = new Date();
     const todayKey = today.getFullYear()
       + String(today.getMonth()+1).padStart(2,'0')
       + String(today.getDate()).padStart(2,'0');
-    const todayQuery = window.FB.query(
-      window.FB.collection(window.FB.db, 'reservations'),
-      window.FB.where('submittedDateKey', '==', todayKey)
-    );
-    const todaySnap = await window.FB.getDocs(todayQuery);
-    const receiptNo = `RES-${todayKey}-${String(todaySnap.size + 1).padStart(3, '0')}`;
-
-    // 예약 문서 저장 (문서 ID = 접수번호)
-    const ref = window.FB.doc(window.FB.db, 'reservations', receiptNo);
-    await window.FB.setDoc(ref, {
-      ...payload,
-      receiptNo,
-      sheetReceiptNo,
-      submittedDateKey: todayKey,
-      submittedAtMs: Date.now(),
-      status: '대기'
-    });
+    const baseNo = /^RES-\d{8}-\d{3,}$/.test(String(sheetReceiptNo || ''))
+      ? String(sheetReceiptNo)
+      : `RES-${todayKey}-${String(Date.now()).slice(-6)}`;
+    const _saveRsv = async (receiptNo) => {
+      const ref = window.FB.doc(window.FB.db, 'reservations', receiptNo);
+      await window.FB.setDoc(ref, {
+        ...payload,
+        receiptNo,
+        sheetReceiptNo,
+        submittedDateKey: todayKey,
+        submittedAtMs: Date.now(),
+        status: '대기'
+      });
+    };
+    try {
+      await _saveRsv(baseNo);
+    } catch (dupErr) {
+      // 같은 번호 문서가 이미 있으면(새로 만들기만 허용이라 거부됨) 꼬리표를 붙여 한 번 더
+      await _saveRsv(baseNo + '-' + Math.random().toString(36).slice(2, 6).toUpperCase());
+    }
 
     // 신규 트리거: 이메일 발송 (기존 앱스스크립트 그대로 유지 — Firestore와 무관)
     const emailParams = new URLSearchParams({ action: 'sendEmail', ...payload, receiptNo: sheetReceiptNo });
